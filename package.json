@@ -1,0 +1,26 @@
+{
+  "name": "invessel",
+  "version": "1.0.0",
+  "description": "Simple and flexible dependency injection container",
+  "author": "Lucas Oliveira de Souza",
+  "license": "MIT",
+  "private": true,
+  "main": "dist/invessel.js",
+  "module": "dist/invessel.module.js",
+  "scripts": {
+    "start": "rollup -c --watch",
+    "build": "rollup -c",
+    "test": "jest",
+    "docs": "jsdoc -d ./docs -r ./src"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.5.5",
+    "@babel/core": "^7.5.5",
+    "@babel/preset-env": "^7.5.5",
+    "jest": "^24.8.0",
+    "jsdoc": "^3.6.3",
+    "rollup": "^1.19.3",
+    "rollup-plugin-babel": "^4.3.3",
+    "rollup-plugin-node-resolve": "^5.2.0"
+  }
+}
