@@ -41,4 +41,17 @@ describe('provider', () => {
         const secondRetrieval = vessel.get('Epsilon');
         expect(provider.getCalls).toBe(2);
     });
+
+    test('can be registered by passing a getter function', () => {
+        const vessel = new InVessel();
+
+        const getter = function (container) {
+            return this.constructor.name;
+        };
+
+        vessel.provider('ProviderClassname', getter);
+        const result = vessel.get('ProviderClassname');
+
+        expect(result).toBe('DefaultProvider');
+    });
 });

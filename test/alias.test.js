@@ -18,7 +18,7 @@ describe('alias', () => {
         const vessel = new InVessel();
 
         const CraftFactory = container => ({ _value: 'Craft service' });
-        vessel.factory('Craft', CraftFactory);
+        vessel.provider('Craft', CraftFactory);
         vessel.alias('Lure', 'Craft');
         vessel.setShared('Craft', false);
         vessel.setShared('Lure', true);

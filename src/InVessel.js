@@ -3,35 +3,28 @@ import DefaultProvider from './DefaultProvider';
 /**
  * @typedef {Object} InVesselConfig
  *
- * @property {Object<string, any>}               [services]
- * @property {Object<string, Factory>}           [factories]
- * @property {Object<string, ProviderInterface>} [providers]
- * @property {Object<string, string>}            [aliases]
- * @property {Object<string, boolean>}           [shared]
- * @property {boolean}                           [sharedByDefault]
- */
-
-/**
- * A function that instantiates a service when called. It is responsible
- * for retrieving and injecting dependencies into the service instance.
- * It should be a pure function.
- *
- * @callback Factory
- *
- * @param {InVessel} container - Container instance, for retrieving
- *     dependencies only.
- *
- * @returns {any}
+ * @property {Object<string, any>}                                          [services]
+ * @property {Object<string, (ProviderInterface|ProviderInterface#get)>}    [providers]
+ * @property {Object<string, string>}                                       [aliases]
+ * @property {Object<string, boolean>}                                      [shared]
+ * @property {boolean}                                                      [sharedByDefault]
  */
 
 /**
  * Interface for service providers.
- * 
+ *
  * @interface ProviderInterface
  */
 /**
+ * @function
  * @name ProviderInterface#get
- * @type {Factory}
+ * @description A function that instantiates a service when called. It
+ *      is responsible for retrieving and injecting dependencies into the
+ *      service instance. It should be a pure function.
+ *
+ * @param {InVessel} container - Container instance, for retrieving
+ *     dependencies only.
+ * @returns {any}
  */
 
 /**
@@ -53,7 +46,7 @@ class InVessel {
         this.services = new Map();
 
         /**
-         * Aliases store. Values are stored here exactly as registered.
+         * Aliases store. Pairs are stored here exactly as registered.
          *
          * @name InVessel#aliases
          * @type {Map<string, string>}
@@ -126,17 +119,12 @@ class InVessel {
             }
         }
 
-        if (config.factories) {
-            for (const [key, factory] of Object.entries(config.factories)) {
-                this.assertNoInstanceExists(key);
-                const provider = new DefaultProvider(factory);
-                this.providers.set(key, provider);
-            }
-        }
-
         if (config.providers) {
-            for (const [key, provider] of Object.entries(config.providers)) {
+            for (const [key, getter] of Object.entries(config.providers)) {
                 this.assertNoInstanceExists(key);
+                const provider = typeof getter === 'function'
+                    ? new DefaultProvider(getter)
+                    : getter;
                 this.providers.set(key, provider);
             }
         }
@@ -225,9 +213,19 @@ class InVessel {
     }
 
     /**
+     * Creates a function whose call is equivalent to calling the container's
+     * 'get' method with the provided key.
+     *
+     * @param {string} key - Key of the entry which the factory will produce.
+     */
+    factory (key) {
+        return this.get.bind(this, key);
+    }
+
+    /**
      * Registers a service in the container. When retrieved, the exact same
      * instance will be returned. The service can be any value that needs to
-     * be stored and retrieved unprocessed.
+     * be retrieved as-stored.
      *
      * @param {string} key - Key of the service for retrieval.
      * @param {any} instance - Value to be stored under this service.
@@ -240,26 +238,16 @@ class InVessel {
 
     /**
      * Registers a provider for the service in the container under given key.
-     * When retrieved, the provider's get method return will be returned.
+     * When retrieved, the provider's 'get' method return value will be
+     * served. A function can be passed in instead, in which case a
+     * {@link DefaultProvider} wrapping the function will be registered.
      *
      * @param {string} key - Entry key.
-     * @param {ProviderInterface} provider - Object that will produce the service.
+     * @param {ProviderInterface|ProviderInterface#get} provider - Object or function
+     *      that will produce the service.
      */
     provider (key, provider) {
         this.configure({ providers: { [key]: provider } });
-    }
-
-    /**
-     * Registers a factory for the service in the container under the given
-     * key. Under the hood, a provider (DefaultProvider) for this service
-     * will be created and its get method/property will be assigned the
-     * factory.
-     *
-     * @param {string} key - Entry key.
-     * @param {Factory} factory - Factory that will produce the service when called.
-     */
-    factory (key, factory) {
-        this.configure({ factories: { [key]: factory } });
     }
 
     /**
@@ -276,9 +264,9 @@ class InVessel {
     }
 
     /**
-     * Sets a flag indicating the caching behavior for the given entry.
-     * Using an alias will not affect the key it resolves to. This
-     * configuration has no effect on services.
+     * Sets a flag indicating the caching behavior for the given entry. Using
+     * an alias will not affect the key it resolves to. This configuration
+     * has no effect on services.
      *
      * @param {string} key - Entry key.
      * @param {boolean} flag - Whether the entry should be shared.
@@ -308,9 +296,8 @@ class InVessel {
     /**
      * Asserts no instance of the entry with given key exists. This always
      * fails for entries registered through the service method. For those
-     * registered with the factory or provider methods, it fails if the entry
-     * is shared and has been requested at least once (which means it was
-     * cached).
+     * registered with the 'provider' method, it fails if the entry is shared
+     * and has been requested at least once (which means it was cached).
      *
      * @param {string} key - Key of the entry to check.
      *
@@ -320,7 +307,7 @@ class InVessel {
      */
     assertNoInstanceExists (key) {
         if (this.services.has(key)) {
-            throw new Error(`An instance of '${key}' entry already exists.`);
+            throw new Error(`An instance for entry '${key}' already exists.`);
         }
     }
 

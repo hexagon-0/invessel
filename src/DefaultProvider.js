@@ -1,15 +1,15 @@
 /**
- * Simple factory-wrapping provider.
- * 
+ * Simple provider. Serves as a wrapper for dependency-getter functions.
+ *
  * @class
  * @implements {ProviderInterface}
  */
 class DefaultProvider {
     /**
-     * @param {Factory} factory - Factory to assign the get method to.
+     * @param {ProviderInterface#get} getter - Function to be used as 'get' method.
      */
-    constructor (factory) {
-        this.get = factory.bind(this);
+    constructor (getter) {
+        this.get = getter.bind(this);
     }
 }
 

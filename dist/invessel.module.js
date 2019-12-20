@@ -74,54 +74,47 @@ function _nonIterableRest() {
 }
 
 /**
- * Simple factory-wrapping provider.
- * 
+ * Simple provider. Serves as a wrapper for dependency-getter functions.
+ *
  * @class
  * @implements {ProviderInterface}
  */
 var DefaultProvider =
 /**
- * @param {Factory} factory - Factory to assign the get method to.
+ * @param {ProviderInterface#get} getter - Function to be used as 'get' method.
  */
-function DefaultProvider(factory) {
+function DefaultProvider(getter) {
   _classCallCheck(this, DefaultProvider);
 
-  this.get = factory.bind(this);
+  this.get = getter.bind(this);
 };
 
 /**
  * @typedef {Object} InVesselConfig
  *
- * @property {Object<string, any>}               [services]
- * @property {Object<string, Factory>}           [factories]
- * @property {Object<string, ProviderInterface>} [providers]
- * @property {Object<string, string>}            [aliases]
- * @property {Object<string, boolean>}           [shared]
- * @property {boolean}                           [sharedByDefault]
- */
-
-/**
- * A function that instantiates a service when called. It is responsible
- * for retrieving and injecting dependencies into the service instance.
- * It should be a pure function.
- *
- * @callback Factory
- *
- * @param {InVessel} container - Container instance, for retrieving
- *     dependencies only.
- *
- * @returns {any}
+ * @property {Object<string, any>}                                          [services]
+ * @property {Object<string, (ProviderInterface|ProviderInterface#get)>}    [providers]
+ * @property {Object<string, string>}                                       [aliases]
+ * @property {Object<string, boolean>}                                      [shared]
+ * @property {boolean}                                                      [sharedByDefault]
  */
 
 /**
  * Interface for service providers.
- * 
+ *
  * @interface ProviderInterface
  */
 
 /**
+ * @function
  * @name ProviderInterface#get
- * @type {Factory}
+ * @description A function that instantiates a service when called. It
+ *      is responsible for retrieving and injecting dependencies into the
+ *      service instance. It should be a pure function.
+ *
+ * @param {InVessel} container - Container instance, for retrieving
+ *     dependencies only.
+ * @returns {any}
  */
 
 /**
@@ -147,7 +140,7 @@ function () {
      */
     this.services = new Map();
     /**
-     * Aliases store. Values are stored here exactly as registered.
+     * Aliases store. Pairs are stored here exactly as registered.
      *
      * @name InVessel#aliases
      * @type {Map<string, string>}
@@ -229,26 +222,15 @@ function () {
         }
       }
 
-      if (config.factories) {
-        for (var _i2 = 0, _Object$entries2 = Object.entries(config.factories); _i2 < _Object$entries2.length; _i2++) {
+      if (config.providers) {
+        for (var _i2 = 0, _Object$entries2 = Object.entries(config.providers); _i2 < _Object$entries2.length; _i2++) {
           var _Object$entries2$_i = _slicedToArray(_Object$entries2[_i2], 2),
               key = _Object$entries2$_i[0],
-              factory = _Object$entries2$_i[1];
+              getter = _Object$entries2$_i[1];
 
           this.assertNoInstanceExists(key);
-          var provider = new DefaultProvider(factory);
+          var provider = typeof getter === 'function' ? new DefaultProvider(getter) : getter;
           this.providers.set(key, provider);
-        }
-      }
-
-      if (config.providers) {
-        for (var _i3 = 0, _Object$entries3 = Object.entries(config.providers); _i3 < _Object$entries3.length; _i3++) {
-          var _Object$entries3$_i = _slicedToArray(_Object$entries3[_i3], 2),
-              key = _Object$entries3$_i[0],
-              _provider2 = _Object$entries3$_i[1];
-
-          this.assertNoInstanceExists(key);
-          this.providers.set(key, _provider2);
         }
       }
 
@@ -259,10 +241,10 @@ function () {
       }
 
       if (config.shared) {
-        for (var _i4 = 0, _Object$entries4 = Object.entries(config.shared); _i4 < _Object$entries4.length; _i4++) {
-          var _Object$entries4$_i = _slicedToArray(_Object$entries4[_i4], 2),
-              key = _Object$entries4$_i[0],
-              flag = _Object$entries4$_i[1];
+        for (var _i3 = 0, _Object$entries3 = Object.entries(config.shared); _i3 < _Object$entries3.length; _i3++) {
+          var _Object$entries3$_i = _slicedToArray(_Object$entries3[_i3], 2),
+              key = _Object$entries3$_i[0],
+              flag = _Object$entries3$_i[1];
 
           this.shared.set(key, flag);
         }
@@ -336,9 +318,21 @@ function () {
       return found;
     }
     /**
+     * Creates a function whose call is equivalent to calling the container's
+     * 'get' method with the provided key.
+     *
+     * @param {string} key - Key of the entry which the factory will produce.
+     */
+
+  }, {
+    key: "factory",
+    value: function factory(key) {
+      return this.get.bind(this, key);
+    }
+    /**
      * Registers a service in the container. When retrieved, the exact same
      * instance will be returned. The service can be any value that needs to
-     * be stored and retrieved unprocessed.
+     * be retrieved as-stored.
      *
      * @param {string} key - Key of the service for retrieval.
      * @param {any} instance - Value to be stored under this service.
@@ -355,10 +349,13 @@ function () {
     }
     /**
      * Registers a provider for the service in the container under given key.
-     * When retrieved, the provider's get method return will be returned.
+     * When retrieved, the provider's 'get' method return value will be
+     * served. A function can be passed in instead, in which case a
+     * {@link DefaultProvider} wrapping the function will be registered.
      *
      * @param {string} key - Entry key.
-     * @param {ProviderInterface} provider - Object that will produce the service.
+     * @param {ProviderInterface|ProviderInterface#get} provider - Object or function
+     *      that will produce the service.
      */
 
   }, {
@@ -366,23 +363,6 @@ function () {
     value: function provider(key, _provider) {
       this.configure({
         providers: _defineProperty({}, key, _provider)
-      });
-    }
-    /**
-     * Registers a factory for the service in the container under the given
-     * key. Under the hood, a provider (DefaultProvider) for this service
-     * will be created and its get method/property will be assigned the
-     * factory.
-     *
-     * @param {string} key - Entry key.
-     * @param {Factory} factory - Factory that will produce the service when called.
-     */
-
-  }, {
-    key: "factory",
-    value: function factory(key, _factory) {
-      this.configure({
-        factories: _defineProperty({}, key, _factory)
       });
     }
     /**
@@ -403,9 +383,9 @@ function () {
       });
     }
     /**
-     * Sets a flag indicating the caching behavior for the given entry.
-     * Using an alias will not affect the key it resolves to. This
-     * configuration has no effect on services.
+     * Sets a flag indicating the caching behavior for the given entry. Using
+     * an alias will not affect the key it resolves to. This configuration
+     * has no effect on services.
      *
      * @param {string} key - Entry key.
      * @param {boolean} flag - Whether the entry should be shared.
@@ -443,9 +423,8 @@ function () {
     /**
      * Asserts no instance of the entry with given key exists. This always
      * fails for entries registered through the service method. For those
-     * registered with the factory or provider methods, it fails if the entry
-     * is shared and has been requested at least once (which means it was
-     * cached).
+     * registered with the 'provider' method, it fails if the entry is shared
+     * and has been requested at least once (which means it was cached).
      *
      * @param {string} key - Key of the entry to check.
      *
@@ -458,7 +437,7 @@ function () {
     key: "assertNoInstanceExists",
     value: function assertNoInstanceExists(key) {
       if (this.services.has(key)) {
-        throw new Error("An instance of '".concat(key, "' entry already exists."));
+        throw new Error("An instance for entry '".concat(key, "' already exists."));
       }
     }
     /**
@@ -473,8 +452,8 @@ function () {
       var entries = Object.entries(aliases);
 
       if (!this.configured) {
-        for (var _i5 = 0, _entries = entries; _i5 < _entries.length; _i5++) {
-          var _entries$_i = _slicedToArray(_entries[_i5], 2),
+        for (var _i4 = 0, _entries = entries; _i4 < _entries.length; _i4++) {
+          var _entries$_i = _slicedToArray(_entries[_i4], 2),
               alias = _entries$_i[0],
               target = _entries$_i[1];
 
@@ -499,8 +478,8 @@ function () {
         }
       }
 
-      for (var _i6 = 0, _entries2 = entries; _i6 < _entries2.length; _i6++) {
-        var _entries2$_i = _slicedToArray(_entries2[_i6], 2),
+      for (var _i5 = 0, _entries2 = entries; _i5 < _entries2.length; _i5++) {
+        var _entries2$_i = _slicedToArray(_entries2[_i5], 2),
             alias = _entries2$_i[0],
             target = _entries2$_i[1];
 
