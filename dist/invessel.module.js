@@ -90,13 +90,31 @@ function DefaultProvider(getter) {
 };
 
 /**
+ * Simple decorator. Serves as a wrapper for decorator functions.
+ * 
+ * @class
+ * @implements {DecoratorInterface}
+ */
+var DefaultDecorator =
+/**
+ * @param {DecoratorInterface#decorate} decorate - Function to be used as
+ *      'decorate' method.
+ */
+function DefaultDecorator(decorate) {
+  _classCallCheck(this, DefaultDecorator);
+
+  this.decorate = decorate.bind(this);
+};
+
+/**
  * @typedef {Object} InVesselConfig
  *
- * @property {Object<string, any>}                                          [services]
- * @property {Object<string, (ProviderInterface|ProviderInterface#get)>}    [providers]
- * @property {Object<string, string>}                                       [aliases]
- * @property {Object<string, boolean>}                                      [shared]
- * @property {boolean}                                                      [sharedByDefault]
+ * @property {Object<string, any>}                                                      [services]
+ * @property {Object<string, (ProviderInterface|ProviderInterface#get)>}                [providers]
+ * @property {Object<string, Array.<(DecoratorInterface|DecoratorInterface#decorate)>>} [decorators]
+ * @property {Object<string, string>}                                                   [aliases]
+ * @property {Object<string, boolean>}                                                  [shared]
+ * @property {boolean}                                                                  [sharedByDefault]
  */
 
 /**
@@ -115,6 +133,26 @@ function DefaultProvider(getter) {
  * @param {InVessel} container - Container instance, for retrieving
  *     dependencies only.
  * @returns {any}
+ */
+
+/**
+ * Interface for decorators.
+ *
+ * @interface DecoratorInterface
+ */
+
+/**
+ * @function
+ * @name DecoratorInterface#decorate
+ * @description A function that receives an instance of a service and
+ *     performs arbitrary processing before returning the same or another
+ *     instance.
+ *
+ * @param {InVessel} container - Container instance, for retrieving
+ *     dependencies only.
+ * @param {string} key - Requested key.
+ * @param {function} create - Callback that returns the instance to be
+ *     decorated.
  */
 
 /**
@@ -167,6 +205,15 @@ function () {
      */
 
     this.providers = new Map();
+    /**
+     * Decorators store.
+     *
+     * @name InVessel#decorators
+     * @type {Map<string, DecoratorInterface>}
+     * @protected
+     */
+
+    this.decorators = new Map();
     /**
      * Whether to assume entries are to be shared. Defaults to true.
      *
@@ -234,6 +281,43 @@ function () {
         }
       }
 
+      if (config.decorators) {
+        for (var _i3 = 0, _Object$entries3 = Object.entries(config.decorators); _i3 < _Object$entries3.length; _i3++) {
+          var _Object$entries3$_i = _slicedToArray(_Object$entries3[_i3], 2),
+              key = _Object$entries3$_i[0],
+              decorators = _Object$entries3$_i[1];
+
+          var storedDecorators = this.decorators.get(key) || [];
+          var concatDecorators = [];
+          var _iteratorNormalCompletion = true;
+          var _didIteratorError = false;
+          var _iteratorError = undefined;
+
+          try {
+            for (var _iterator = decorators.values()[Symbol.iterator](), _step; !(_iteratorNormalCompletion = (_step = _iterator.next()).done); _iteratorNormalCompletion = true) {
+              var decorator = _step.value;
+              var d = typeof decorator === 'function' ? new DefaultDecorator(decorator) : decorator;
+              concatDecorators.push(d);
+            }
+          } catch (err) {
+            _didIteratorError = true;
+            _iteratorError = err;
+          } finally {
+            try {
+              if (!_iteratorNormalCompletion && _iterator["return"] != null) {
+                _iterator["return"]();
+              }
+            } finally {
+              if (_didIteratorError) {
+                throw _iteratorError;
+              }
+            }
+          }
+
+          this.decorators.set(key, storedDecorators.concat(concatDecorators));
+        }
+      }
+
       if (config.aliases) {
         this.configureAliases(config.aliases);
       } else if (!this.configured && this.aliases.size > 0) {
@@ -241,10 +325,10 @@ function () {
       }
 
       if (config.shared) {
-        for (var _i3 = 0, _Object$entries3 = Object.entries(config.shared); _i3 < _Object$entries3.length; _i3++) {
-          var _Object$entries3$_i = _slicedToArray(_Object$entries3[_i3], 2),
-              key = _Object$entries3$_i[0],
-              flag = _Object$entries3$_i[1];
+        for (var _i4 = 0, _Object$entries4 = Object.entries(config.shared); _i4 < _Object$entries4.length; _i4++) {
+          var _Object$entries4$_i = _slicedToArray(_Object$entries4[_i4], 2),
+              key = _Object$entries4$_i[0],
+              flag = _Object$entries4$_i[1];
 
           this.shared.set(key, flag);
         }
@@ -267,6 +351,8 @@ function () {
   }, {
     key: "get",
     value: function get(key) {
+      var _this = this;
+
       var requestedKey = key;
 
       if (this.services.has(requestedKey)) {
@@ -284,22 +370,64 @@ function () {
         return service;
       }
 
+      var instance;
+
       if (this.providers.has(key)) {
         var provider = this.providers.get(key);
-        var instance = provider.get(this);
 
-        if (isKeyShared) {
-          this.services.set(key, instance);
+        var create = function create() {
+          return provider.get(_this);
+        };
+
+        if (this.decorators.has(key)) {
+          var decorators = this.decorators.get(key);
+          var _iteratorNormalCompletion2 = true;
+          var _didIteratorError2 = false;
+          var _iteratorError2 = undefined;
+
+          try {
+            var _loop = function _loop() {
+              var decorator = _step2.value;
+              var prevCreate = create;
+
+              create = function create() {
+                return decorator.decorate(_this, key, prevCreate);
+              };
+            };
+
+            for (var _iterator2 = decorators.values()[Symbol.iterator](), _step2; !(_iteratorNormalCompletion2 = (_step2 = _iterator2.next()).done); _iteratorNormalCompletion2 = true) {
+              _loop();
+            }
+          } catch (err) {
+            _didIteratorError2 = true;
+            _iteratorError2 = err;
+          } finally {
+            try {
+              if (!_iteratorNormalCompletion2 && _iterator2["return"] != null) {
+                _iterator2["return"]();
+              }
+            } finally {
+              if (_didIteratorError2) {
+                throw _iteratorError2;
+              }
+            }
+          }
         }
 
-        if (isAlias && isRequestedKeyShared) {
-          this.services.set(requestedKey, instance);
-        }
-
-        return instance;
+        instance = create();
+      } else {
+        throw Error("Entry '".concat(key, "' not found."));
       }
 
-      throw Error("Entry '".concat(key, "' not found."));
+      if (isKeyShared) {
+        this.services.set(key, instance);
+      }
+
+      if (isAlias && isRequestedKeyShared) {
+        this.services.set(requestedKey, instance);
+      }
+
+      return instance;
     }
     /**
      * Check for the existence of an entry under the given key. Returns true
@@ -363,6 +491,13 @@ function () {
     value: function provider(key, _provider) {
       this.configure({
         providers: _defineProperty({}, key, _provider)
+      });
+    }
+  }, {
+    key: "decorator",
+    value: function decorator(key, _decorator) {
+      this.configure({
+        decorators: _defineProperty({}, key, [_decorator])
       });
     }
     /**
@@ -452,8 +587,8 @@ function () {
       var entries = Object.entries(aliases);
 
       if (!this.configured) {
-        for (var _i4 = 0, _entries = entries; _i4 < _entries.length; _i4++) {
-          var _entries$_i = _slicedToArray(_entries[_i4], 2),
+        for (var _i5 = 0, _entries = entries; _i5 < _entries.length; _i5++) {
+          var _entries$_i = _slicedToArray(_entries[_i5], 2),
               alias = _entries$_i[0],
               target = _entries$_i[1];
 
@@ -478,8 +613,8 @@ function () {
         }
       }
 
-      for (var _i5 = 0, _entries2 = entries; _i5 < _entries2.length; _i5++) {
-        var _entries2$_i = _slicedToArray(_entries2[_i5], 2),
+      for (var _i6 = 0, _entries2 = entries; _i6 < _entries2.length; _i6++) {
+        var _entries2$_i = _slicedToArray(_entries2[_i6], 2),
             alias = _entries2$_i[0],
             target = _entries2$_i[1];
 
@@ -493,31 +628,31 @@ function () {
       }
 
       this.resolveAliases(aliases);
-      var _iteratorNormalCompletion = true;
-      var _didIteratorError = false;
-      var _iteratorError = undefined;
+      var _iteratorNormalCompletion3 = true;
+      var _didIteratorError3 = false;
+      var _iteratorError3 = undefined;
 
       try {
-        for (var _iterator = this.resolvedAliases.entries()[Symbol.iterator](), _step; !(_iteratorNormalCompletion = (_step = _iterator.next()).done); _iteratorNormalCompletion = true) {
-          var _step$value = _slicedToArray(_step.value, 2),
-              alias = _step$value[0],
-              target = _step$value[1];
+        for (var _iterator3 = this.resolvedAliases.entries()[Symbol.iterator](), _step3; !(_iteratorNormalCompletion3 = (_step3 = _iterator3.next()).done); _iteratorNormalCompletion3 = true) {
+          var _step3$value = _slicedToArray(_step3.value, 2),
+              alias = _step3$value[0],
+              target = _step3$value[1];
 
           if (target in aliases) {
             this.resolvedAliases.set(alias, this.resolvedAliases.get(target));
           }
         }
       } catch (err) {
-        _didIteratorError = true;
-        _iteratorError = err;
+        _didIteratorError3 = true;
+        _iteratorError3 = err;
       } finally {
         try {
-          if (!_iteratorNormalCompletion && _iterator["return"] != null) {
-            _iterator["return"]();
+          if (!_iteratorNormalCompletion3 && _iterator3["return"] != null) {
+            _iterator3["return"]();
           }
         } finally {
-          if (_didIteratorError) {
-            throw _iteratorError;
+          if (_didIteratorError3) {
+            throw _iteratorError3;
           }
         }
       }
@@ -536,13 +671,13 @@ function () {
     key: "resolveAliases",
     value: function resolveAliases(aliases) {
       var keys = aliases instanceof Map ? aliases.keys() : Object.keys(aliases);
-      var _iteratorNormalCompletion2 = true;
-      var _didIteratorError2 = false;
-      var _iteratorError2 = undefined;
+      var _iteratorNormalCompletion4 = true;
+      var _didIteratorError4 = false;
+      var _iteratorError4 = undefined;
 
       try {
-        for (var _iterator2 = keys[Symbol.iterator](), _step2; !(_iteratorNormalCompletion2 = (_step2 = _iterator2.next()).done); _iteratorNormalCompletion2 = true) {
-          var alias = _step2.value;
+        for (var _iterator4 = keys[Symbol.iterator](), _step4; !(_iteratorNormalCompletion4 = (_step4 = _iterator4.next()).done); _iteratorNormalCompletion4 = true) {
+          var alias = _step4.value;
           var visited = new Map();
           var name = alias;
 
@@ -558,16 +693,16 @@ function () {
           this.resolvedAliases.set(alias, name);
         }
       } catch (err) {
-        _didIteratorError2 = true;
-        _iteratorError2 = err;
+        _didIteratorError4 = true;
+        _iteratorError4 = err;
       } finally {
         try {
-          if (!_iteratorNormalCompletion2 && _iterator2["return"] != null) {
-            _iterator2["return"]();
+          if (!_iteratorNormalCompletion4 && _iterator4["return"] != null) {
+            _iterator4["return"]();
           }
         } finally {
-          if (_didIteratorError2) {
-            throw _iteratorError2;
+          if (_didIteratorError4) {
+            throw _iteratorError4;
           }
         }
       }

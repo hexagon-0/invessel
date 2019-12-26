@@ -1,13 +1,15 @@
 import DefaultProvider from './DefaultProvider';
+import DefaultDecorator from './DefaultDecorator';
 
 /**
  * @typedef {Object} InVesselConfig
  *
- * @property {Object<string, any>}                                          [services]
- * @property {Object<string, (ProviderInterface|ProviderInterface#get)>}    [providers]
- * @property {Object<string, string>}                                       [aliases]
- * @property {Object<string, boolean>}                                      [shared]
- * @property {boolean}                                                      [sharedByDefault]
+ * @property {Object<string, any>}                                                      [services]
+ * @property {Object<string, (ProviderInterface|ProviderInterface#get)>}                [providers]
+ * @property {Object<string, Array.<(DecoratorInterface|DecoratorInterface#decorate)>>} [decorators]
+ * @property {Object<string, string>}                                                   [aliases]
+ * @property {Object<string, boolean>}                                                  [shared]
+ * @property {boolean}                                                                  [sharedByDefault]
  */
 
 /**
@@ -26,6 +28,25 @@ import DefaultProvider from './DefaultProvider';
  *     dependencies only.
  * @returns {any}
  */
+
+ /**
+  * Interface for decorators.
+  *
+  * @interface DecoratorInterface
+  */
+ /**
+  * @function
+  * @name DecoratorInterface#decorate
+  * @description A function that receives an instance of a service and
+  *     performs arbitrary processing before returning the same or another
+  *     instance.
+  *
+  * @param {InVessel} container - Container instance, for retrieving
+  *     dependencies only.
+  * @param {string} key - Requested key.
+  * @param {function} create - Callback that returns the instance to be
+  *     decorated.
+  */
 
 /**
  * Main interface for registering and retrieving dependencies.
@@ -72,6 +93,15 @@ class InVessel {
          * @protected
          */
         this.providers = new Map();
+
+        /**
+         * Decorators store.
+         *
+         * @name InVessel#decorators
+         * @type {Map<string, DecoratorInterface>}
+         * @protected
+         */
+        this.decorators = new Map();
 
         /**
          * Whether to assume entries are to be shared. Defaults to true.
@@ -129,6 +159,22 @@ class InVessel {
             }
         }
 
+        if (config.decorators) {
+            for (const [key, decorators] of Object.entries(config.decorators)) {
+                const storedDecorators = this.decorators.get(key) || [];
+                const concatDecorators = [];
+
+                for (const decorator of decorators.values()) {
+                    const d = typeof decorator === 'function'
+                        ? new DefaultDecorator(decorator)
+                        : decorator;
+                    concatDecorators.push(d);
+                }
+
+                this.decorators.set(key, storedDecorators.concat(concatDecorators));
+            }
+        }
+
         if (config.aliases) {
             this.configureAliases(config.aliases);
         } else if (!this.configured && this.aliases.size > 0) {
@@ -179,22 +225,33 @@ class InVessel {
             return service;
         }
 
+        let instance;
         if (this.providers.has(key)) {
             const provider = this.providers.get(key);
-            const instance = provider.get(this);
+            let create = () => provider.get(this);
 
-            if (isKeyShared) {
-                this.services.set(key, instance);
+            if (this.decorators.has(key)) {
+                const decorators = this.decorators.get(key);
+                for (const decorator of decorators.values()) {
+                    const prevCreate = create;
+                    create = () => decorator.decorate(this, key, prevCreate);
+                }
             }
 
-            if (isAlias && isRequestedKeyShared) {
-                this.services.set(requestedKey, instance);
-            }
-
-            return instance;
+            instance = create();
+        } else {
+            throw Error(`Entry '${key}' not found.`);
         }
 
-        throw Error(`Entry '${key}' not found.`);
+        if (isKeyShared) {
+            this.services.set(key, instance);
+        }
+
+        if (isAlias && isRequestedKeyShared) {
+            this.services.set(requestedKey, instance);
+        }
+
+        return instance;
     }
 
     /**
@@ -248,6 +305,10 @@ class InVessel {
      */
     provider (key, provider) {
         this.configure({ providers: { [key]: provider } });
+    }
+
+    decorator (key, decorator) {
+        this.configure({ decorators: { [key]: [decorator] } });
     }
 
     /**
